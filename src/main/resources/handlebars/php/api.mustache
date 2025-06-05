@@ -431,6 +431,9 @@ use {{invokerPackage}}\ObjectSerializer;
             if ($httpBody instanceof \stdClass && $headers['Content-Type'] === 'application/json') {
                 $httpBody = \GuzzleHttp\json_encode($httpBody);
             }
+            if (is_array($httpBody) && $headers['Content-Type'] === 'application/json') {
+              $httpBody = \GuzzleHttp\json_encode(array_map(fn($o) => ObjectSerializer::sanitizeForSerialization($o), $httpBody));
+            }
         } elseif (count($formParams) > 0) {
             if ($multipart) {
                 $multipartContents = [];
