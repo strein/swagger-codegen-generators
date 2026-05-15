@@ -12,23 +12,20 @@ jobs:
       matrix:
         java: [ 11, 17 ]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         name: git checkout
       - name: Set up Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           java-version: ${{ matrix.java }}
           distribution: temurin
-          server-id: central
-          server-username: MAVEN_USERNAME
-          server-password: MAVEN_PASSWORD
-      - name: Cache local Maven repository
-        uses: actions/cache@v4
+          cache: maven
+          overwrite-settings: false
+      - name: Add Central-Portal snapshot repo to settings.xml
+        uses: s4u/maven-settings-action@v4.0.0
         with:
-          path: ~/.m2/repository
-          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
-          restore-keys: |
-            ${{ runner.os }}-maven-
+          repositories: '[{"id":"central-portal-snapshots","name":"Sonatype Central Portal snapshots","url":"https://central.sonatype.com/repository/maven-snapshots/","releases":{"enabled":false},"snapshots":{"enabled":true}}]'
+          servers: '[{"id":"central","username":"${{ secrets.MAVEN_CENTRAL_USERNAME }}","password":"${{ secrets.MAVEN_CENTRAL_PASSWORD }}"}]'
       - name: preliminary checks
         run: |
           docker login --username=${{ secrets.DOCKERHUB_SB_USERNAME }} --password=${{ secrets.DOCKERHUB_SB_PASSWORD }}
@@ -52,7 +49,7 @@ jobs:
             if [[ ! $CODEGEN_VERSION =~ ^.*SNAPSHOT$ ]];
             then
               # check release version exists
-              export CODEGEN_FOUND_JSON=`curl -s --max-time 60 --retry 15 --connect-timeout 20 https://search.maven.org/solrsearch/select?q=g:io.swagger.codegen.v3%20AND%20a:swagger-codegen%20AND%20v:${CODEGEN_VERSION}%20AND%20p:jar`
+              export CODEGEN_FOUND_JSON=`curl -s --max-time 60 --retry 15 --connect-timeout 20 https://central.sonatype.com/solrsearch/select?q=g:io.swagger.codegen.v3%20AND%20a:swagger-codegen%20AND%20v:${CODEGEN_VERSION}%20AND%20p:jar`
               export CODEGEN_FOUND=`echo ${CODEGEN_FOUND_JSON} | jq '.response.numFound'`
               echo "CODEGEN_FOUND" ${CODEGEN_FOUND}
               if [[ $CODEGEN_FOUND == '0' ]];
@@ -62,10 +59,7 @@ jobs:
                 SNAP_API="https://central.sonatype.com/repository/maven-snapshots"
                 ARTIFACT_PATH="io/swagger/codegen/v3/swagger-codegen"
                 ROOT_META="${SNAP_API}/${ARTIFACT_PATH}/maven-metadata.xml"
-                LATEST_DIR=$(curl -s "$ROOT_META" | grep -oP '(?<=<version>)3\.[^<]+' | sort -V | tail -n1)
-                SNAP_META="${SNAP_API}/${ARTIFACT_PATH}/${LATEST_DIR}/maven-metadata.xml"
-                LAST_SNAP=$(curl -s "$SNAP_META" | grep -oP '(?<=<value>)[^<]+' | head -n1)
-                export LAST_SNAP=${LAST_SNAP:1:${#LAST_SNAP}-2}
+                export LAST_SNAP=$(curl -s "$ROOT_META" | grep -oP '(?<=<version>)3\.[^<]+' | sort -V | tail -n1)
                 echo "LAST_SNAP $LAST_SNAP"
                 export CODEGEN_VERSION_PROPERTY=-Dswagger-codegen-version=$LAST_SNAP
               fi
