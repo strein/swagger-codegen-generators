@@ -88,8 +88,8 @@ jobs:
       - name: Import GPG key
         uses: crazy-max/ghaction-import-gpg@v6
         with:
-          gpg_private_key: ${{ secrets.MAVEN_GPG_PRIVATE_KEY }}
-          passphrase: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
+          gpg_private_key: ${{ secrets.OSSRH_GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.OSSRH_GPG_PRIVATE_PASSPHRASE }}
 
       - name: Build generators with release version
         run: ./mvnw -Prelease clean verify -U --settings "$HOME/.m2/settings.xml"
@@ -103,11 +103,13 @@ jobs:
             const owner = context.repo.owner;
             const repo = context.repo.repo;
 
-            let release;
-            try {
-              const { data } = await github.rest.repos.getReleaseByTag({ owner, repo, tag });
-              release = data;
-            } catch (error) {
+            const releases = await github.paginate(github.rest.repos.listReleases, {
+              owner,
+              repo,
+              per_page: 100,
+            });
+            const release = releases.find((r) => r.tag_name === tag);
+            if (!release) {
               core.setFailed(`Expected prepared draft release for tag ${tag}, but it was not found.`);
               return;
             }
